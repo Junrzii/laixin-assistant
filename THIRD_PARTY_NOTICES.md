@@ -47,9 +47,3 @@ IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
 CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-## OVO data compatibility reference
-
-https://github.com/wq70/xinOVO (read-only format inspection on 2026-11-07).
-Only user-selected role data is imported. Existing API keys and unrelated role data are ignored. This package does not modify or connect to the hosted OVO site.
-
