@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-CN"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light"><meta name="theme-color" content="#f3f6f3">
+<meta name="apple-mobile-web-app-title" content="来信">
+<title>来信</title>
+<link rel="apple-touch-icon" sizes="180x180" href="./icon-180.png">
+<link rel="icon" type="image/png" href="./icon-192.png">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="stylesheet" href="./style.css?v=0.2.1"><script src="./app.js?v=0.2.2" defer></script>
+</head>
+<body><main>
+<header class="app-header"><img class="app-mark" src="./icon-180.png" alt="" width="52" height="52"><div><span class="eyebrow">PRIVATE COMPANION</span><h1>来信</h1><p>把你喜欢的角色，带进日常聊天。</p></div></header>
+<section id="login-panel" class="card"><h2>打开你的配置页</h2><p class="muted">输入安装时生成的配置页密码。</p><form id="login-form"><label>配置页密码<input id="password" type="password" autocomplete="current-password" required></label><button type="submit">登录</button></form></section>
+<div id="app" hidden>
+<section class="card status-card"><div><span class="eyebrow">CONNECTION</span><h2 id="connection">尚未连接微信</h2><p id="runtime" class="muted">先保存角色，再扫码。</p></div><span id="status-dot" class="dot"></span><p id="runtime-error" class="error full"></p><button id="enabled" class="full" type="button">开启自动回复</button></section>
+<section class="card"><div class="section-heading"><h2>01 / 角色与记忆</h2><label class="file-label">导入文件<input id="role-file" type="file" accept=".json,.png,.txt" hidden></label></div><p class="muted">支持角色 JSON、PNG 角色卡和人设 TXT。也可以直接粘贴 OVO 的人设与记忆。</p><div id="import-preview" hidden><label>选择要导入的角色<select id="profile-picker"></select></label><p id="import-summary" class="muted"></p><button type="button" id="apply-import" class="secondary">填入下方，检查后保存</button></div><form id="config-form">
+<label>角色名字<input id="name" maxlength="100" placeholder="输入你想使用的角色名字" autocomplete="off"></label>
+<label>角色人设<textarea id="persona" rows="7" maxlength="60000" placeholder="写下角色的性格、背景和说话方式，或导入角色卡…" required></textarea></label>
+<label>你的资料 <span class="optional">选填</span><textarea id="user_persona" rows="3" maxlength="10000" placeholder="填写希望角色知道的称呼或偏好…"></textarea></label>
+<label>既有记忆 <span class="optional">选填</span><textarea id="memory" rows="5" maxlength="60000" placeholder="复制需要带过来的记忆摘要…"></textarea></label>
+<div class="wb-link"><div><strong>世界书</strong><span>按分类管理，支持批量导入</span></div><button id="wb-open" class="secondary" type="button">打开世界书 <span aria-hidden="true">›</span></button></div>
+<h2 class="subheading">02 / 模型设置</h2><p class="muted">使用你自己的 OpenAI 兼容接口。填写提供商给出的 Base URL 和模型名称。</p>
+<label>Base URL<input id="base_url" type="url" placeholder="https://你的接口地址/v1" autocomplete="off" required></label>
+<label>API Key<input id="api_key" type="password" placeholder="首次填写；留空会保留已有 Key" autocomplete="off"><span id="key-status" class="hint"></span></label>
+<label>模型名称<input id="model" placeholder="填写提供商给出的模型 ID" autocomplete="off" required></label>
+<div class="columns"><label>最近对话轮数<input id="history_turns" type="number" min="1" max="100" value="20" required></label><label>温度<input id="temperature" type="number" min="0" max="2" step="0.1" value="0.8" required></label></div>
+<p class="note">Key 保存在运行助手的设备上，保存后不会回显。角色资料和聊天上下文会发送给你配置的模型服务。</p><button type="submit">保存角色与模型</button></form></section>
+<section class="card"><h2>03 / 连接微信</h2><p class="muted">微信 → 我 → 设置 → 插件 → 微信 ClawBot。获取二维码后扫码，并在微信确认连接。</p><button id="new-qr" type="button" class="secondary">获取微信连接二维码</button><div id="qr-area" hidden><img id="qr-image" alt="微信连接二维码" width="280" height="280"><a id="qr-download" href="./api/qr.png" download="weixin-login.png">下载二维码图片</a><p class="note">同一部手机操作时，可以先截图，再从微信扫一扫的相册中选择。如果微信要求实时扫码，可用另一块屏幕展示。</p></div><p id="qr-status" class="muted"></p><div id="verify-area" hidden><label>微信显示的验证码<input id="verify-code" inputmode="numeric" autocomplete="one-time-code"></label><button id="send-verify" type="button" class="secondary">提交验证码</button></div><div id="owner-area" hidden><p class="note">微信没有返回扫码用户标识。先开启收取消息，再从微信发一条文字；确认下方标识属于你后绑定。</p><div id="owner-list"></div></div><p class="note">连接后，点击上方“开启自动回复”。目前支持私聊文字，以及微信提供的语音转写。没有转写时会提示已收到语音；图片、文件和群聊暂不处理。微信登录失效后需要重新扫码。</p></section>
+<section class="card"><h2>04 / 连接 Telegram</h2>
+<p class="muted">验证并保存 Bot 后，点「打开 Telegram」或扫码，在聊天里点 Start。回到这里开启自动回复。</p>
+<form id="tg-form" autocomplete="off">
+<label>连接方式<select id="tg-mode"><option value="standard">服务器直连 / HTTP CONNECT</option><option value="pages">Cloudflare Pages 中转</option></select></label>
+<div id="tg-standard-fields">
+<label>Bot Token<input id="tg-token" type="password" maxlength="128" autocomplete="new-password" spellcheck="false"></label>
+<label>服务器代理 <span class="optional">选填</span><input id="tg-proxy" type="password" maxlength="1000" autocomplete="new-password" spellcheck="false"></label>
+<label id="tg-direct-row" hidden><span><input id="tg-direct" type="checkbox"> 清除已保存的代理，改用服务器直连</span></label>
+<p class="note">填写服务器能访问的 HTTP CONNECT 代理，例如 http://127.0.0.1:7890。「测试连通性」可以在填 Token 前使用。</p>
+</div>
+<div id="tg-pages-fields" hidden>
+<label>Pages 项目地址<input id="tg-relay-url" type="text" inputmode="url" maxlength="160" placeholder="https://你的项目.pages.dev" autocapitalize="off" spellcheck="false"></label>
+<label>中转密钥<input id="tg-relay-key" type="password" maxlength="128" autocomplete="new-password" spellcheck="false"></label>
+<p class="note">密钥须与 Pages 的 RELAY_KEY 相同。BotFather Token 填在 Pages 的 TELEGRAM_BOT_TOKEN Secret 里。测试会检查服务器到 Pages、以及 Pages 到 Telegram 两段连接。</p>
+</div>
+<div class="actions"><button type="submit">验证并保存 Bot</button><button id="tg-test" class="secondary" type="button">测试连通性</button></div>
+</form>
+<p id="tg-status" class="muted" aria-live="polite"></p>
+<p id="tg-error" class="error" aria-live="polite"></p>
+<div id="tg-pair" hidden>
+<p class="note">链接 10 分钟内有效。请用你自己的 Telegram 账号打开并点 Start。</p>
+<a id="tg-link" target="_blank" rel="noopener noreferrer">打开 Telegram</a>
+<details><summary>在另一台设备上扫码</summary><img id="tg-qr" alt="Telegram 账号绑定二维码" width="224" height="224"></details>
+</div>
+<div class="actions"><button id="tg-renew" class="secondary" type="button" hidden>重新生成绑定链接</button><button id="tg-enabled" type="button" hidden>开启 Telegram 自动回复</button></div>
+</section>
+<section class="card"><h2>05 / 共享长期记忆</h2>
+<p class="muted">在微信或 Telegram 单独发「记住：你想保存的内容」，就会保存到这里。两边聊到相关话题时都可以参考。</p>
+<form id="memory-edit-form" hidden>
+<label>修改记忆<textarea id="memory-text" rows="3" maxlength="500" required></textarea></label>
+<button type="submit">保存修改</button><button id="memory-cancel" type="button" class="text-button">取消</button>
+</form>
+<div id="memory-list"></div></section>
+<section class="card"><h2>06 / 聊天体验</h2>
+<p class="muted" id="chat-time-note">时间感知已启用。助手按北京时间参考消息时间与对话间隔。</p>
+<form id="experience-form">
+<label class="experience-toggle"><input id="shared-history" type="checkbox"><span>微信和 Telegram 接着聊</span></label>
+<p class="muted">开启后，回复时会参考另一边最近 24 小时内已完成的对话。</p>
+<label class="experience-toggle"><input id="letters-enabled" type="checkbox"><span>让他在 Telegram 主动来信</span></label>
+<p class="muted">在允许的时段随机发来一条消息，偶尔写一封短来信。刚聊完时会跳过。</p>
+<div class="columns">
+<label>安静开始<input id="letters-quiet-start" type="time" required></label>
+<label>安静结束<input id="letters-quiet-end" type="time" required></label>
+</div>
+<label>每天最多<select id="letters-daily-limit"><option value="1">1 封</option><option value="2">2 封</option><option value="3">3 封</option></select></label>
+<p class="note">时段使用北京时间。开始与结束相同表示全天可收。暂停 Telegram 自动回复时，主动来信也会暂停。</p>
+<button type="submit">保存聊天体验</button>
+</form>
+<p id="letters-status" class="muted" aria-live="polite"></p>
+</section>
+<section class="card"><div class="section-heading"><h2>最近来信</h2><button id="refresh" type="button" class="text-button">刷新</button></div><label>聊天平台<select id="message-channel"><option value="weixin">微信</option><option value="telegram">Telegram</option></select></label><p class="muted" id="delivery-note">提交状态只表示微信接口处理了请求。实际送达以微信聊天窗口为准。</p><p class="muted" id="quote-note">新收到的微信引用会和回复一起显示。微信没有提供原文时会注明。</p><div id="messages"><p class="muted">还没有微信消息。</p></div></section>
+<footer><p>微信与 Telegram 的聊天记录分开保存。这里不会自动回写 OVO。</p><div><a href="./api/export" download>导出人设、记忆、世界书与对话</a><button id="logout" type="button" class="text-button">退出配置页</button></div></footer>
+</div>
+<section id="wb-panel" class="wb-panel" hidden>
+  <header class="wb-header">
+    <button type="button" id="wb-back" class="wb-icon" aria-label="返回"></button>
+    <h2 id="wb-title" tabindex="-1">世界书</h2>
+    <div class="wb-toolbar" id="wb-toolbar">
+      <button type="button" id="wb-import-open" class="wb-icon" aria-label="导入"></button>
+      <button type="button" id="wb-export" class="wb-icon" aria-label="导出"></button>
+      <button type="button" id="wb-add" class="wb-icon" aria-label="新增条目"></button>
+    </div>
+  </header>
+  <div id="wb-library">
+    <div class="wb-controls">
+      <label class="wb-search"><span class="wb-sr">搜索世界书</span><input type="search" id="wb-search" placeholder="搜索名称、分类、正文…" autocomplete="off"></label>
+      <label class="wb-filter"><span class="wb-sr">筛选条目状态</span><select id="wb-filter"><option value="all">全部</option><option value="enabled">已启用</option><option value="disabled">已停用</option></select></label>
+    </div>
+    <p class="wb-summary muted" id="wb-summary" aria-live="polite"></p>
+    <div id="wb-list"></div>
+  </div>
+  <form id="wb-form" class="wb-editor" hidden>
+    <label>条目名称<input id="wb-name" required maxlength="160" autocomplete="off"></label>
+    <label>条目分类 <span class="optional">输入名称即可新建，也可以用「背景/家庭」</span><input id="wb-category" maxlength="160" list="wb-categories" placeholder="未分类" autocomplete="off"></label>
+    <datalist id="wb-categories"></datalist>
+    <label>标签<input id="wb-tags" maxlength="1000" placeholder="例如：设定，文风" autocomplete="off"></label>
+    <label>条目内容<textarea id="wb-content" rows="8" maxlength="60000" required placeholder="粘贴提示词或设定正文"></textarea></label>
+    <fieldset class="wb-positions">
+      <legend>注入位置 <span class="optional">控制条目在系统提示里的顺序</span></legend>
+      <label><input type="radio" name="wb-position" value="before" checked>前</label>
+      <label><input type="radio" name="wb-position" value="middle">中</label>
+      <label><input type="radio" name="wb-position" value="after">后</label>
+    </fieldset>
+    <label class="wb-switch"><span>全局世界书 <small>保留 OVO 标记，当前只有一个角色</small></span><input id="wb-global" type="checkbox" role="switch"></label>
+    <label class="wb-switch"><span>常驻 <small>开启后，每次回复都读取这条</small></span><input id="wb-always" type="checkbox" role="switch" checked></label>
+    <label id="wb-keywords-label" hidden>触发词<input id="wb-keywords" maxlength="1000" placeholder="用逗号分隔，例如：律所，开庭" autocomplete="off"><span class="hint">微信本轮消息里出现任一触发词时读取。</span></label>
+    <label class="wb-switch"><span>启用</span><input id="wb-enabled" type="checkbox" role="switch" checked></label>
+    <button type="submit">保存条目</button>
+  </form>
+  <form id="wb-import-form" class="wb-editor" hidden>
+    <p class="muted" id="worldbook-file-note">在 OVO 点「分类导出数据」，只勾选「世界书」，然后选导出的 .ee 文件。也可以一次选多份 Word（.docx）、JSON 或 TXT。每份 Word 文档按文件名导入为一条。</p>
+    <label>选择文件<input id="wb-files" type="file" accept=".ee,.json,.txt,.gz,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple required></label>
+    <label class="wb-switch"><span>保留文件里的启用状态 <small>默认先停用，导入后再挑要用的条目</small></span><input id="wb-keep-enabled" type="checkbox" role="switch"></label>
+    <button type="submit">导入世界书</button>
+  </form>
+</section><div id="toast" role="status" hidden></div></main></body></html>
