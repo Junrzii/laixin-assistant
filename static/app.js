@@ -8,7 +8,13 @@ const fields=[...profileFields,'base_url','model','temperature','history_turns']
 function toast(message){$('toast').textContent=message;$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,6500);}
 async function api(path,data){const response=await fetch(base+'/api/'+path,{method:data===undefined?'GET':'POST',credentials:'same-origin',headers:data===undefined?{}:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:data===undefined?undefined:JSON.stringify(data)});const result=await response.json();if(response.status===401){if(wb.view!=='closed')showWorldbook('closed');pendingRoleBooks=[];$('login-panel').hidden=false;$('app').hidden=true;loaded=false;}if(!response.ok)throw Error(result.error||'请求失败，请稍后重试。');return result;}
 async function action(button,callback){button.disabled=true;try{await callback();}catch(error){toast(error.message);}finally{button.disabled=false;}}
-async function refresh(){if(refreshing)return;refreshing=true;try{state=await api('state');csrf=state.csrf;$('login-panel').hidden=true;$('app').hidden=wb.view!=='closed';const c=state.config;if(!loaded){for(const field of fields)$(field).value=c[field]??'';$('tg-mode').value=state.telegram.relay_url?'pages':'standard';$('tg-relay-url').value=state.telegram.relay_url||'';renderTelegramMode();loadExperience(state.experience);loaded=true;}$('api_key').placeholder=c.has_api_key?'已保存，留空保持不变':'填写你的 API Key';$('key-status').textContent=c.has_api_key?'已有 Key，保存后不会回显。':'尚未保存 API Key';$('connection').textContent=c.enabled?'微信助手运行中':state.connected?'微信已连接，回复已暂停':'尚未连接微信';$('status-dot').classList.toggle('online',c.enabled&&state.connected);$('runtime').textContent=c.enabled?state.runtime.poll:'先保存配置并扫码，然后开启自动回复。';$('runtime-error').textContent=c.enabled?state.runtime.error:'';$('enabled').textContent=c.enabled?'暂停自动回复':'开启自动回复';$('new-qr').disabled=!!state.login.running;const statuses={idle:'',starting:'正在获取二维码…',wait:'等待微信扫码与确认',scaned:'已扫码，请在微信确认',confirmed:'微信连接成功，可以开启自动回复。',expired:'二维码已过期，请重新获取。',need_verifycode:'请填写微信显示的验证码。',verify_code_blocked:'验证码尝试过多，请重新扫码。',scaned_but_redirect:'微信正在继续验证…',binded_redirect:'这个 Bot 已绑定其他实例，请在微信检查连接。',error:state.login.error||'连接失败，请重新尝试。'};$('qr-status').textContent=statuses[state.login.status]||state.login.status;$('verify-area').hidden=state.login.status!=='need_verifycode';$('qr-area').hidden=!state.login.has_qr;if(state.login.has_qr&&!qrShown){$('qr-image').src=base+'/api/qr.png?t='+Date.now();qrShown=true;}if(!state.login.has_qr)qrShown=false;$('owner-area').hidden=!state.connected||state.owner_bound;renderOwners(state.pending_owners);renderTelegram(state.telegram);renderExperience(state.experience,state.telegram);renderMemories(state.saved_memories,state.telegram.saved_memories);renderMessages();}catch(error){if($('login-panel').hidden)toast(error.message);}finally{refreshing=false;}}
+async function refresh(){if(refreshing)return;refreshing=true;try{state=await api('state');csrf=state.csrf;$('login-panel').hidden=true;$('app').hidden=wb.view!=='closed';const c=state.config;renderSetup(c);if(!loaded){for(const field of fields)$(field).value=c[field]??'';$('tg-mode').value=state.telegram.relay_url?'pages':'standard';$('tg-relay-url').value=state.telegram.relay_url||'';renderTelegramMode();loadExperience(state.experience);loaded=true;}$('api_key').placeholder=c.has_api_key?'已保存，留空保持不变':'填写你的 API Key';$('key-status').textContent=c.has_api_key?'已有 Key，保存后不会回显。':'尚未保存 API Key';$('connection').textContent=c.enabled?'微信助手运行中':state.connected?'微信已连接，回复已暂停':'尚未连接微信';$('status-dot').classList.toggle('online',c.enabled&&state.connected);$('runtime').textContent=c.enabled?state.runtime.poll:'先保存配置并扫码，然后开启自动回复。';$('runtime-error').textContent=c.enabled?state.runtime.error:'';$('enabled').textContent=c.enabled?'暂停自动回复':'开启自动回复';$('new-qr').disabled=!!state.login.running;const statuses={idle:'',starting:'正在获取二维码…',wait:'等待微信扫码与确认',scaned:'已扫码，请在微信确认',confirmed:'微信连接成功，可以开启自动回复。',expired:'二维码已过期，请重新获取。',need_verifycode:'请填写微信显示的验证码。',verify_code_blocked:'验证码尝试过多，请重新扫码。',scaned_but_redirect:'微信正在继续验证…',binded_redirect:'这个 Bot 已绑定其他实例，请在微信检查连接。',error:state.login.error||'连接失败，请重新尝试。'};$('qr-status').textContent=statuses[state.login.status]??state.login.status;$('verify-area').hidden=state.login.status!=='need_verifycode';$('qr-area').hidden=!state.login.has_qr;if(state.login.has_qr&&!qrShown){$('qr-image').src=base+'/api/qr.png?t='+Date.now();qrShown=true;}if(!state.login.has_qr)qrShown=false;$('owner-area').hidden=!state.connected||state.owner_bound;renderOwners(state.pending_owners);renderTelegram(state.telegram);renderExperience(state.experience,state.telegram);renderMemories(state.saved_memories,state.telegram.saved_memories);renderMessages();}catch(error){if($('login-panel').hidden)toast(error.message);}finally{refreshing=false;}}
+function renderSetup(config){
+  const modelReady=config.persona&&config.base_url&&config.model&&config.has_api_key;
+  const preview=new URLSearchParams(location.search).get('preview')==='1';
+  $('setup-card').hidden=!preview&&Boolean(modelReady&&(state.owner_bound||state.telegram.bound));
+}
+
 function renderOwners(owners){$('owner-list').replaceChildren();for(const owner of owners){const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent='绑定我的微信：'+owner.peer;button.addEventListener('click',()=>{if(confirm('确认这是你刚才发送消息的微信用户标识？'))action(button,async()=>{await api('approve',{peer:owner.peer});await refresh();});});$('owner-list').append(button);}}
 const stateLabels={pending:'等待回复',generating:'正在生成',ready:'准备发送',sending:'正在发送',done:'已提交 · 送达待确认',uncertain:'送达待确认',failed_model:'模型请求失败',failed_send:'发送失败',skipped:'已跳过'};
 const memoryForm=$('memory-edit-form');
@@ -79,6 +85,7 @@ $('tg-enabled').addEventListener('click',event=>action(event.currentTarget,async
 }));
 
 function loadExperience(options){
+  $('photo-enabled').checked=options.photo_enabled;
   $('shared-history').checked=options.shared_history;
   $('letters-enabled').checked=options.letters_enabled;
   $('letters-quiet-start').value=options.quiet_start;
@@ -97,6 +104,7 @@ $('experience-form').addEventListener('submit',event=>{
   action(event.submitter,async()=>{
     await api('experience',{
       shared_history:$('shared-history').checked,
+      photo_enabled:$('photo-enabled').checked,
       letters_enabled:$('letters-enabled').checked,
       quiet_start:$('letters-quiet-start').value,
       quiet_end:$('letters-quiet-end').value,
@@ -261,6 +269,43 @@ function renderMessages(){
 $('message-channel').addEventListener('change',renderMessages);
 $('login-form').addEventListener('submit',event=>{event.preventDefault();action(event.submitter,async()=>{await api('login',{password:$('password').value});$('password').value='';loaded=false;await refresh();});});
 $('config-form').addEventListener('submit',event=>{event.preventDefault();const data={};for(const field of fields)data[field]=['temperature','history_turns'].includes(field)?Number($(field).value):$(field).value;data.api_key=$('api_key').value;if(pendingRoleBooks.length)data.worldbook_entries=pendingRoleBooks;action(event.submitter,async()=>{await api('config',data);pendingRoleBooks=[];$('api_key').value='';toast('角色和模型配置已保存。');await refresh();});});
+const modelProbeFields=['base_url','model','temperature','api_key'];
+const modelTestStatus=$('model-test-status');
+let modelProbeRevision=0;
+
+function showModelTest(message='',failed=false){
+  modelTestStatus.textContent=message;
+  modelTestStatus.classList.toggle('error',failed);
+}
+
+$('config-form').addEventListener('input',event=>{
+  if(!modelProbeFields.includes(event.target.id))return;
+  modelProbeRevision++;
+  showModelTest();
+});
+
+$('model-test').addEventListener('click',async event=>{
+  const saved=state.config;
+  const edited=$('api_key').value.trim()||$('base_url').value.trim()!==saved.base_url||
+    $('model').value.trim()!==saved.model||Number($('temperature').value)!==saved.temperature;
+  if(edited||!saved.base_url||!saved.model||!saved.has_api_key){
+    showModelTest('请先填写并保存模型设置，再点测试。',true);
+    return;
+  }
+  const button=event.currentTarget;
+  const revision=modelProbeRevision;
+  button.disabled=true;
+  showModelTest('正在请求模型…');
+  try{
+    await api('model/probe',{});
+    if(revision===modelProbeRevision)showModelTest('模型测试通过，可以去微信或 Telegram 试聊。');
+  }catch(error){
+    if(revision===modelProbeRevision)showModelTest(error.message,true);
+  }finally{
+    button.disabled=false;
+  }
+});
+
 $('enabled').addEventListener('click',event=>action(event.currentTarget,async()=>{await api('enabled',{enabled:!state.config.enabled});await refresh();}));
 $('new-qr').addEventListener('click',event=>action(event.currentTarget,async()=>{await api('qr',{});qrShown=false;await refresh();}));
 $('send-verify').addEventListener('click',event=>action(event.currentTarget,async()=>{await api('verify',{code:$('verify-code').value.trim()});$('verify-code').value='';toast('验证码已提交。');}));

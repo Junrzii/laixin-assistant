@@ -7,27 +7,43 @@
 <link rel="apple-touch-icon" sizes="180x180" href="./icon-180.png">
 <link rel="icon" type="image/png" href="./icon-192.png">
 <link rel="manifest" href="./manifest.webmanifest">
-<link rel="stylesheet" href="./style.css?v=0.2.1"><script src="./app.js?v=0.2.2" defer></script>
+<link rel="stylesheet" href="./style.css?v=0.2.3"><script src="./app.js?v=0.2.3" defer></script>
 </head>
 <body><main>
 <header class="app-header"><img class="app-mark" src="./icon-180.png" alt="" width="52" height="52"><div><span class="eyebrow">PRIVATE COMPANION</span><h1>来信</h1><p>把你喜欢的角色，带进日常聊天。</p></div></header>
 <section id="login-panel" class="card"><h2>打开你的配置页</h2><p class="muted">输入安装时生成的配置页密码。</p><form id="login-form"><label>配置页密码<input id="password" type="password" autocomplete="current-password" required></label><button type="submit">登录</button></form></section>
 <div id="app" hidden>
-<section class="card status-card"><div><span class="eyebrow">CONNECTION</span><h2 id="connection">尚未连接微信</h2><p id="runtime" class="muted">先保存角色，再扫码。</p></div><span id="status-dot" class="dot"></span><p id="runtime-error" class="error full"></p><button id="enabled" class="full" type="button">开启自动回复</button></section>
-<section class="card"><div class="section-heading"><h2>01 / 角色与记忆</h2><label class="file-label">导入文件<input id="role-file" type="file" accept=".json,.png,.txt" hidden></label></div><p class="muted">支持角色 JSON、PNG 角色卡和人设 TXT。也可以直接粘贴 OVO 的人设与记忆。</p><div id="import-preview" hidden><label>选择要导入的角色<select id="profile-picker"></select></label><p id="import-summary" class="muted"></p><button type="button" id="apply-import" class="secondary">填入下方，检查后保存</button></div><form id="config-form">
+<section id="setup-card" class="card setup-card" aria-labelledby="setup-title" hidden>
+  <span class="eyebrow">GETTING STARTED</span>
+  <h2 id="setup-title">收第一封来信</h2>
+  <p class="muted">填好角色和模型，再选一个聊天平台。只接微信或只接 Telegram 都可以。</p>
+  <ol class="setup-steps">
+    <li><a href="#role-settings">填角色</a></li>
+    <li><a href="#model-settings">设模型</a></li>
+    <li><a href="#weixin-settings">接微信</a><span>或</span><a href="#telegram-settings">接 Telegram</a></li>
+  </ol>
+</section>
+<section class="card status-card"><div><span class="eyebrow">微信连接</span><h2 id="connection">尚未连接微信</h2><p id="runtime" class="muted">先保存角色，再扫码。</p></div><span id="status-dot" class="dot"></span><p id="runtime-error" class="error full"></p><button id="enabled" class="full" type="button">开启自动回复</button></section>
+<section class="card"><div class="section-heading"><h2 id="role-settings" tabindex="-1">01 / 角色与记忆</h2><label class="file-label">导入文件<input id="role-file" type="file" accept=".json,.png,.txt" hidden></label></div><p class="muted">支持角色 JSON、PNG 角色卡和人设 TXT。也可以直接粘贴 OVO 的人设与记忆。</p><div id="import-preview" hidden><label>选择要导入的角色<select id="profile-picker"></select></label><p id="import-summary" class="muted"></p><button type="button" id="apply-import" class="secondary">填入下方，检查后保存</button></div><form id="config-form">
 <label>角色名字<input id="name" maxlength="100" placeholder="输入你想使用的角色名字" autocomplete="off"></label>
 <label>角色人设<textarea id="persona" rows="7" maxlength="60000" placeholder="写下角色的性格、背景和说话方式，或导入角色卡…" required></textarea></label>
 <label>你的资料 <span class="optional">选填</span><textarea id="user_persona" rows="3" maxlength="10000" placeholder="填写希望角色知道的称呼或偏好…"></textarea></label>
 <label>既有记忆 <span class="optional">选填</span><textarea id="memory" rows="5" maxlength="60000" placeholder="复制需要带过来的记忆摘要…"></textarea></label>
 <div class="wb-link"><div><strong>世界书</strong><span>按分类管理，支持批量导入</span></div><button id="wb-open" class="secondary" type="button">打开世界书 <span aria-hidden="true">›</span></button></div>
-<h2 class="subheading">02 / 模型设置</h2><p class="muted">使用你自己的 OpenAI 兼容接口。填写提供商给出的 Base URL 和模型名称。</p>
+<h2 id="model-settings" class="subheading" tabindex="-1">02 / 模型设置</h2><p class="muted">使用你自己的 OpenAI 兼容接口。填写提供商给出的 Base URL 和模型名称。</p>
 <label>Base URL<input id="base_url" type="url" placeholder="https://你的接口地址/v1" autocomplete="off" required></label>
 <label>API Key<input id="api_key" type="password" placeholder="首次填写；留空会保留已有 Key" autocomplete="off"><span id="key-status" class="hint"></span></label>
 <label>模型名称<input id="model" placeholder="填写提供商给出的模型 ID" autocomplete="off" required></label>
 <div class="columns"><label>最近对话轮数<input id="history_turns" type="number" min="1" max="100" value="20" required></label><label>温度<input id="temperature" type="number" min="0" max="2" step="0.1" value="0.8" required></label></div>
-<p class="note">Key 保存在运行助手的设备上，保存后不会回显。角色资料和聊天上下文会发送给你配置的模型服务。</p><button type="submit">保存角色与模型</button></form></section>
-<section class="card"><h2>03 / 连接微信</h2><p class="muted">微信 → 我 → 设置 → 插件 → 微信 ClawBot。获取二维码后扫码，并在微信确认连接。</p><button id="new-qr" type="button" class="secondary">获取微信连接二维码</button><div id="qr-area" hidden><img id="qr-image" alt="微信连接二维码" width="280" height="280"><a id="qr-download" href="./api/qr.png" download="weixin-login.png">下载二维码图片</a><p class="note">同一部手机操作时，可以先截图，再从微信扫一扫的相册中选择。如果微信要求实时扫码，可用另一块屏幕展示。</p></div><p id="qr-status" class="muted"></p><div id="verify-area" hidden><label>微信显示的验证码<input id="verify-code" inputmode="numeric" autocomplete="one-time-code"></label><button id="send-verify" type="button" class="secondary">提交验证码</button></div><div id="owner-area" hidden><p class="note">微信没有返回扫码用户标识。先开启收取消息，再从微信发一条文字；确认下方标识属于你后绑定。</p><div id="owner-list"></div></div><p class="note">连接后，点击上方“开启自动回复”。目前支持私聊文字，以及微信提供的语音转写。没有转写时会提示已收到语音；图片、文件和群聊暂不处理。微信登录失效后需要重新扫码。</p></section>
-<section class="card"><h2>04 / 连接 Telegram</h2>
+<p class="note">Key 保存在运行助手的设备上，保存后不会回显。角色资料和聊天上下文会发送给你配置的模型服务。</p><div class="config-actions">
+  <button type="submit">保存角色与模型</button>
+  <button id="model-test" type="button" class="secondary">测试模型</button>
+</div>
+<p id="model-test-status" class="model-test-status" role="status"></p>
+<p class="hint">保存后可测试。只发送一条短测试消息，模型服务商可能按正常调用计费。</p>
+</form></section>
+<section class="card"><h2 id="weixin-settings" tabindex="-1">03 / 连接微信</h2><p class="muted">微信 → 我 → 设置 → 插件 → 微信 ClawBot。获取二维码后扫码，并在微信确认连接。</p><button id="new-qr" type="button" class="secondary">获取微信连接二维码</button><div id="qr-area" hidden><img id="qr-image" alt="微信连接二维码" width="280" height="280"><a id="qr-download" href="./api/qr.png" download="weixin-login.png">下载二维码图片</a><p class="note">同一部手机操作时，可以先截图，再从微信扫一扫的相册中选择。如果微信要求实时扫码，可用另一块屏幕展示。</p></div><p id="qr-status" class="muted"></p><div id="verify-area" hidden><label>微信显示的验证码<input id="verify-code" inputmode="numeric" autocomplete="one-time-code"></label><button id="send-verify" type="button" class="secondary">提交验证码</button></div><div id="owner-area" hidden><p class="note">微信没有返回扫码用户标识。先开启收取消息，再从微信发一条文字；确认下方标识属于你后绑定。</p><div id="owner-list"></div></div><p class="note">连接后，点击上方“开启自动回复”。目前支持私聊文字，以及微信提供的语音转写。没有转写时会提示已收到语音；照片可在「06 / 聊天体验」开启识别，文件与群聊暂不处理。微信登录失效后需要重新扫码。</p></section>
+<section class="card"><h2 id="telegram-settings" tabindex="-1">04 / 连接 Telegram</h2>
 <p class="muted">验证并保存 Bot 后，点「打开 Telegram」或扫码，在聊天里点 Start。回到这里开启自动回复。</p>
 <form id="tg-form" autocomplete="off">
 <label>连接方式<select id="tg-mode"><option value="standard">服务器直连 / HTTP CONNECT</option><option value="pages">Cloudflare Pages 中转</option></select></label>
@@ -63,6 +79,8 @@
 <section class="card"><h2>06 / 聊天体验</h2>
 <p class="muted" id="chat-time-note">时间感知已启用。助手按北京时间参考消息时间与对话间隔。</p>
 <form id="experience-form">
+<label class="experience-toggle"><input id="photo-enabled" type="checkbox"><span>让角色识别私聊照片</span></label>
+<p class="muted">需要支持图片输入的模型。开启后，照片会交给已配置的模型服务，来信只在本轮处理照片，历史记录保留文字标记。Telegram Pages 中转请先升级到 v4，微信加密照片需要安装包内说明所列的解密依赖。</p>
 <label class="experience-toggle"><input id="shared-history" type="checkbox"><span>微信和 Telegram 接着聊</span></label>
 <p class="muted">开启后，回复时会参考另一边最近 24 小时内已完成的对话。</p>
 <label class="experience-toggle"><input id="letters-enabled" type="checkbox"><span>让他在 Telegram 主动来信</span></label>

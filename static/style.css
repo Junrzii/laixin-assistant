@@ -22,3 +22,16 @@ body.wb-mode{background:#f8faf8}body.wb-mode main{padding-top:env(safe-area-inse
 .app-header h1{line-height:1.12;margin:5px 0}
 .app-header p{line-height:1.5}
 #config-form input::placeholder,#config-form textarea::placeholder{color:#697a6e}
+
+.setup-card{background:linear-gradient(145deg,#f7fbf7,#fff 70%);border-color:#dbe8dd}
+.setup-card h2{margin:7px 0 6px}
+.setup-card .muted{margin-bottom:13px;color:#526c5c}
+.setup-steps{list-style:none;counter-reset:setup-step;margin:0;padding:0;display:flex;gap:7px 13px;flex-wrap:wrap}
+.setup-steps li{counter-increment:setup-step;display:flex;gap:6px;align-items:center;color:#546b5c;font-size:12px}
+.setup-steps li::before{content:counter(setup-step);display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:#e5f0e7;color:#355d47;font-weight:650}
+.setup-steps a{display:inline-flex;align-items:center;min-height:32px;font-size:13px;color:#315940}
+.config-actions{display:flex;flex-wrap:wrap;gap:8px}
+.config-actions button:first-child{flex:1 0 auto}
+.model-test-status{margin:8px 0 0;color:#315940;font-size:13px;line-height:1.6}
+.model-test-status:empty{display:none}
+.model-test-status.error{color:#a74434}
