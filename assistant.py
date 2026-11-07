@@ -23,6 +23,7 @@ import signal
 import socket
 import sqlite3
 import struct
+import sys
 import threading
 import time
 import urllib.error
@@ -37,7 +38,7 @@ from xml.etree import ElementTree
 
 from qrcodegen import QrCode
 
-VERSION = '0.2.2'
+VERSION = '0.2.3'
 PREFIX = '/wx-assistant'
 STATIC_TYPES = {
     'app.js': 'text/javascript; charset=utf-8',
@@ -48,7 +49,11 @@ STATIC_TYPES = {
     'icon-512.png': 'image/png',
 }
 WEIXIN_BASE = 'https://ilinkai.weixin.qq.com'
+WEIXIN_CDN = 'novac2c.cdn.weixin.qq.com'
 TELEGRAM_HOST = 'api.telegram.org'
+MAX_PHOTO_BYTES = 5 * 1024 * 1024
+MAX_PHOTOS = 3
+PHOTO_MARKER = '【收到照片】'
 PAIR_SECONDS = 600
 CHANNEL_VERSION = '2.4.10'
 MAX_UPLOAD = 12 * 1024 * 1024
@@ -61,7 +66,7 @@ BATCH_MAX_CHARS = 24000
 BEIJING = timezone(timedelta(hours=8))
 LETTER_IDLE_SECONDS = 30 * 60
 LETTER_SLOT_GRACE = 5 * 60
-DEFAULT_EXPERIENCE = dict(shared_history=False, letters_enabled=False,
+DEFAULT_EXPERIENCE = dict(shared_history=False, letters_enabled=False, photo_enabled=False,
                           quiet_start='22:00', quiet_end='08:00', daily_limit=1)
 VOICE_TRANSCRIBED = '【微信语音转写】'
 VOICE_UNTRANSCRIBED = '【收到微信语音，暂无转写】'
@@ -93,6 +98,99 @@ class RejectedSend(FriendlyError):
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None  # Never forward Bot/API credentials to a redirect target.
+
+
+def weixin_photo_reference(item):
+    if not isinstance(item, dict):
+        return {}
+    media = item.get('media')
+    media = media if isinstance(media, dict) else {}
+    param = string(media.get('encrypt_query_param'), 4096)
+    url = string(media.get('full_url'), 8192)
+    try:
+        parsed = urllib.parse.urlsplit(url)
+        host = parsed.hostname or ''
+        trusted = (parsed.scheme == 'https' and
+                   (host == 'cdn.weixin.qq.com' or host.endswith('.cdn.weixin.qq.com')) and
+                   not parsed.username and not parsed.password and parsed.port in (None, 443) and
+                   not parsed.fragment and not re.search(r'[\x00-\x20\x7f]', url))
+    except ValueError:
+        trusted = False
+    if not trusted:
+        if not param:
+            return {}
+        url = 'https://' + WEIXIN_CDN + '/c2c/download?' + urllib.parse.urlencode(
+            {'encrypted_query_param': param}, quote_via=urllib.parse.quote)
+    return {'url': url, 'hex_key': string(item.get('aeskey'), 64),
+            'base64_key': string(media.get('aes_key'), 128)}
+
+
+def weixin_photo_bytes(ref):
+    key = ref.get('hex_key') or ref.get('base64_key')
+    if key:
+        try:
+            if ref.get('hex_key'):
+                key = bytes.fromhex(key)
+            else:
+                key = base64.b64decode(key, validate=True)
+                if len(key) == 32:
+                    key = bytes.fromhex(key.decode('ascii'))
+            if len(key) != 16:
+                raise ValueError
+        except (ValueError, UnicodeError):
+            raise FriendlyError('微信照片的解密信息不完整，请重新发送。') from None
+        deps = str(Path(__file__).resolve().parent / 'photo-deps')
+        if Path(deps).is_dir() and deps not in sys.path:
+            sys.path.append(deps)
+        try:
+            from cryptography.hazmat.primitives import padding
+            from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+        except ImportError:
+            raise FriendlyError('微信照片需要解密，请按包内说明安装 cryptography。') from None
+    try:
+        opener = urllib.request.build_opener(NoRedirect())
+        with opener.open(ref['url'], timeout=10) as response:
+            data = response.read(MAX_PHOTO_BYTES + 17)
+    except (KeyError, OSError, http.client.HTTPException, ValueError):
+        raise FriendlyError('微信照片下载失败，请确认服务器能访问微信 CDN 后重新发送。') from None
+    if len(data) > MAX_PHOTO_BYTES + 16:
+        raise FriendlyError('照片太大，请发一张 5 MB 以内的照片。')
+    if key:
+        try:
+            decryptor = Cipher(algorithms.AES(key), modes.ECB()).decryptor()
+            unpadder = padding.PKCS7(128).unpadder()
+            data = unpadder.update(decryptor.update(data) + decryptor.finalize()) + unpadder.finalize()
+        except ValueError:
+            raise FriendlyError('微信照片解密失败，请重新发送。') from None
+    return data
+
+
+def telegram_photo_id(sizes):
+    if not isinstance(sizes, list):
+        return ''
+    for size in reversed(sizes):
+        if not isinstance(size, dict):
+            continue
+        file_id, length = size.get('file_id'), size.get('file_size')
+        if (isinstance(file_id, str) and re.fullmatch(r'[A-Za-z0-9_-]{1,512}', file_id) and
+                (length is None or type(length) is int and 0 < length <= MAX_PHOTO_BYTES)):
+            return file_id
+    return ''
+
+
+def photo_content(data):
+    if len(data) > MAX_PHOTO_BYTES:
+        raise FriendlyError('照片太大，请发一张 5 MB 以内的照片。')
+    if data.startswith(b'\xff\xd8\xff'):
+        kind = 'jpeg'
+    elif data.startswith(b'\x89PNG\r\n\x1a\n'):
+        kind = 'png'
+    elif data.startswith(b'RIFF') and data[8:12] == b'WEBP':
+        kind = 'webp'
+    else:
+        raise FriendlyError('暂时读不了这种图片格式，请改用 JPG、PNG 或 WebP。')
+    encoded = base64.b64encode(data).decode('ascii')
+    return {'type': 'image_url', 'image_url': {'url': f'data:image/{kind};base64,{encoded}'}}
 
 
 def json_bytes(value):
@@ -212,7 +310,7 @@ class Telegram:
     def __init__(self, token='', proxy=''):
         self.token, self.proxy = token, proxy
 
-    def request(self, path, body=None, timeout=8):
+    def request(self, path, body=None, timeout=8, *, photo=False):
         try:
             if self.proxy:
                 proxy = urllib.parse.urlsplit(self.proxy)
@@ -229,7 +327,8 @@ class Telegram:
             with contextlib.closing(conn):
                 if body is None:
                     conn.request('GET', path)
-                    return conn.getresponse().status, b''
+                    response = conn.getresponse()
+                    return response.status, response.read(MAX_PHOTO_BYTES + 1) if photo else b''
                 conn.request('POST', path, json_bytes(body), {'Content-Type': 'application/json'})
                 response = conn.getresponse()
                 return response.status, response.read(4 * 1024 * 1024 + 1)
@@ -276,6 +375,18 @@ class Telegram:
     def typing(self, peer):
         self.call('sendChatAction', {'chat_id': int(peer), 'action': 'typing'}, timeout=2)
 
+    def download_photo(self, file_id):
+        if not file_id:
+            raise FriendlyError('找不到可下载的 Telegram 照片，请发一张 5 MB 以内的照片。')
+        info = self.call('getFile', {'file_id': file_id}, timeout=10)
+        path = info.get('file_path') if isinstance(info, dict) else ''
+        if not isinstance(path, str) or not re.fullmatch(r'[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*\.[A-Za-z0-9]+', path):
+            raise FriendlyError('Telegram 未返回有效的照片地址，请重新发送。')
+        status, data = self.request(f'/file/bot{self.token}/{path}', timeout=10, photo=True)
+        if status != 200:
+            raise FriendlyError('Telegram 照片下载失败，请重新发送。')
+        return data
+
 
 class TelegramPagesRelay(Telegram):
     def __init__(self, host, key):
@@ -290,7 +401,19 @@ class TelegramPagesRelay(Telegram):
             raise FriendlyError('中转返回的 Bot 资料不正确。')
         return 200
 
-    def request(self, path, body=None, timeout=8):
+    def download_photo(self, file_id):
+        if not file_id:
+            raise FriendlyError('找不到可下载的 Telegram 照片，请发一张 5 MB 以内的照片。')
+        status, data = self.request('/telegram/getPhoto', {'file_id': file_id}, timeout=22, photo=True)
+        if status == 404:
+            raise FriendlyError('请先把现有 Pages 项目重新部署为包内的 v4 中转。')
+        if status == 413:
+            raise FriendlyError('照片太大，请发一张 5 MB 以内的照片。')
+        if status != 200:
+            raise FriendlyError('Telegram 照片下载失败，请重新发送。')
+        return data
+
+    def request(self, path, body=None, timeout=8, *, photo=False):
         conn = http.client.HTTPSConnection(self.host, timeout=timeout)
         try:
             with contextlib.closing(conn):
@@ -308,6 +431,8 @@ class TelegramPagesRelay(Telegram):
                     raise RejectedSend('Pages 缺少密钥或 Bot Token。请设置 Secret 并重新部署。')
                 if relay_error == 'upstream':
                     raise FriendlyError('Pages 已收到请求，但访问 Telegram 失败。')
+                if photo:
+                    return status, response.read(MAX_PHOTO_BYTES + 1) if status == 200 else b''
                 return status, response.read(4 * 1024 * 1024 + 1)
         except (OSError, http.client.HTTPException, ValueError):
             raise FriendlyError('连不上 Pages 中转，请检查运行助手的设备能否访问你的 pages.dev 地址。') from None
@@ -711,6 +836,8 @@ class Store:
                 db.execute('ALTER TABLE inbox ADD COLUMN message_at REAL')
             if 'reply_at' not in columns:
                 db.execute('ALTER TABLE inbox ADD COLUMN reply_at REAL')
+            if 'image_refs' not in columns:
+                db.execute("ALTER TABLE inbox ADD COLUMN image_refs TEXT NOT NULL DEFAULT '[]'")
             db.execute("CREATE INDEX IF NOT EXISTS inbox_batch ON inbox(batch_id,created) WHERE batch_id<>''")
             db.execute('CREATE INDEX IF NOT EXISTS inbox_conversation ON inbox(bot,peer,created)')
         os.chmod(self.path, 0o600)
@@ -801,13 +928,15 @@ class Store:
         with contextlib.closing(self.connect()) as db:
             return [dict(row) for row in db.execute(sql, args)]
 
-    def update_job(self, job_id, **values):
+    def update_job(self, job_id, *, forget_images=False, **values):
         allowed = {'state', 'reply', 'chunks', 'sent', 'error', 'attempts', 'next_try', 'receipts'}
         if not values or not set(values) <= allowed:
             raise ValueError('Invalid update fields')
         with contextlib.closing(self.connect()) as db, db:
             db.execute('UPDATE inbox SET ' + ','.join(key + '=?' for key in values) + ' WHERE id=?',
                        (*values.values(), job_id))
+            if forget_images:
+                db.execute("UPDATE inbox SET image_refs='[]' WHERE id=? OR batch_id=?", (job_id, job_id))
 
     def resend(self, bot, peer, job_id, expected_resends):
         with contextlib.closing(self.connect()) as db, db:
@@ -1022,13 +1151,15 @@ class Store:
                                [(job['id'], row['id']) for row in members[1:]])
 
             if job['batch_id']:
-                members = db.execute('''SELECT text,context,COALESCE(message_at,created) AS when_at
+                members = db.execute('''SELECT text,context,image_refs,COALESCE(message_at,created) AS when_at
                     FROM inbox WHERE batch_id=? AND batch_id<>''
                     ORDER BY created,rowid''', (job['batch_id'],)).fetchall()
                 job['text'] = '\n'.join(row['text'] for row in members)
                 job['context'] = members[-1]['context']
                 times = [row['when_at'] for row in members]
                 job['message_range'] = (min(times), max(times))
+                if job['state'] == 'pending':
+                    job['photos'] = [ref for row in members for ref in json.loads(row['image_refs'])]
             if job['state'] == 'pending':
                 db.execute("UPDATE inbox SET state='generating',error='' WHERE id=?", (job['id'],))
             return job
@@ -1081,13 +1212,15 @@ class Store:
 
     def ingest(self, result, auth):
         with contextlib.closing(self.connect()) as db, db:
+            photo_enabled = self.get_in(db, 'experience', {}).get('photo_enabled', False)
             for msg in result.get('msgs', []):
                 if not isinstance(msg, dict) or msg.get('message_type') != 1 or msg.get('message_state') == 1 or msg.get('group_id'):
                     continue
                 peer, context = msg.get('from_user_id'), msg.get('context_token')
                 if not isinstance(peer, str) or not isinstance(context, str) or not peer or not context:
                     continue
-                parts, plain_parts = [], []
+                parts, plain_parts, photos = [], [], []
+                owner = auth.get('owner') == peer
                 only_text = True
                 for item in msg.get('item_list', []):
                     if not isinstance(item, dict):
@@ -1095,6 +1228,9 @@ class Store:
                         continue
                     kind = item.get('type')
                     only_text = only_text and kind == 1
+                    if kind == 2 and photo_enabled and owner:
+                        parts.append(PHOTO_MARKER)
+                        photos.append(weixin_photo_reference(item.get('image_item')))
                     if kind not in (1, 3):
                         continue
                     content = item.get('text_item' if kind == 1 else 'voice_item')
@@ -1120,15 +1256,15 @@ class Store:
                             [msg.get('seq'), msg.get('create_time_ms'), plain_text or text[:20000], context]]
                 job_id = hashlib.sha256(json_bytes(identity)).hexdigest()
                 # Pairing owner comes from the QR login response, never from the first sender.
-                owner = auth.get('owner') == peer
                 self.enqueue(db, job_id, auth['bot_id'], peer, text, context, owner,
-                             plain_text if only_text else '', msg.get('create_time_ms'), scale=1000)
+                             plain_text if only_text else '', msg.get('create_time_ms'), scale=1000,
+                             photos=photos[:MAX_PHOTOS])
             cursor = result.get('get_updates_buf')
             if isinstance(cursor, str) and cursor:
                 self.set_in(db, 'cursor:' + auth['bot_id'], cursor)
 
     @staticmethod
-    def enqueue(db, job_id, bot, peer, text, context, owner, plain_text, sent_at=None, *, scale=1):
+    def enqueue(db, job_id, bot, peer, text, context, owner, plain_text, sent_at=None, *, scale=1, photos=()):
         state, reply, memory = ('pending' if owner else 'blocked'), '', ''
         command = re.fullmatch(r'记住[：:]\s*(.*)', plain_text, re.S) if owner else None
         if command:
@@ -1141,10 +1277,10 @@ class Store:
                 reply = '记下了。'
         created = time.time()
         inserted = db.execute('''INSERT OR IGNORE INTO inbox
-            (id,bot,peer,text,context,created,state,reply,chunks,is_control,message_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?)''', (job_id, bot, peer, text[:20000], context,
+            (id,bot,peer,text,context,created,state,reply,chunks,is_control,message_at,image_refs)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)''', (job_id, bot, peer, text[:20000], context,
             created, state, reply, json.dumps([reply] if reply else []), int(command is not None),
-            platform_time(sent_at, created, scale)))
+            platform_time(sent_at, created, scale), json.dumps(photos)))
         if inserted.rowcount and memory:
             count = db.execute('SELECT count(*) FROM saved_memories WHERE bot=? AND peer=?',
                                (bot, peer)).fetchone()[0]
@@ -1159,6 +1295,7 @@ class Store:
     def ingest_telegram(self, updates, auth):
         bot = auth['bot_id']
         with contextlib.closing(self.connect()) as db, db:
+            photo_enabled = self.get_in(db, 'experience', {}).get('photo_enabled', False)
             offset = None
             for update in updates:
                 if not isinstance(update, dict) or type(update.get('update_id')) is not int:
@@ -1174,7 +1311,8 @@ class Store:
                     continue
                 peer = str(chat['id'])
                 plain_text = string(msg.get('text'), 20000).strip()
-                if not plain_text:
+                is_photo = bool(photo_enabled and auth.get('owner') == peer and msg.get('photo'))
+                if not plain_text and not is_photo:
                     continue
                 if not auth.get('owner'):
                     code = auth.get('pair_code', '')
@@ -1186,16 +1324,17 @@ class Store:
                 if (not auth.get('enabled') or peer != auth['owner'] or
                     re.match(r'^/start(?:\s|$)', plain_text)):
                     continue
-                text = plain_text
+                text = (PHOTO_MARKER + '\n' + string(msg.get('caption'), 20000).strip()).strip() if is_photo else plain_text
                 reference = msg.get('reply_to_message')
                 if isinstance(reference, dict):
                     quote = msg.get('quote')
                     preview = string(quote.get('text'), 1000).strip() if isinstance(quote, dict) else ''
                     preview = preview or string(reference.get('text') or reference.get('caption'), 1000).strip()
                     quoted = json.dumps(preview, ensure_ascii=False) if preview else '（原文未提供）'
-                    text = f'【Telegram 引用】{quoted} 【用户回复】{json.dumps(plain_text, ensure_ascii=False)}'
+                    text = f'【Telegram 引用】{quoted} 【用户回复】{json.dumps(text, ensure_ascii=False)}'
                 job_id = hashlib.sha256(json_bytes([bot, peer, msg['message_id']])).hexdigest()
-                self.enqueue(db, job_id, bot, peer, text, '', True, plain_text, msg.get('date'))
+                photos = [telegram_photo_id(msg.get('photo'))] if is_photo else []
+                self.enqueue(db, job_id, bot, peer, text, '', True, plain_text, msg.get('date'), photos=photos)
             if offset is not None:
                 self.set_in(db, 'cursor:' + bot, {'offset': offset, 'seen': time.time()})
 
@@ -1215,7 +1354,8 @@ def complete(config, history, text, transport=None):
               f'适合连发时写成一到三段，每段是一条自然、完整的{channel}消息，段与段之间留一个空行。'
               '一句话就够时就写一句，不必硬拆。'
               f'【{channel}引用】是用户所引用的旧消息，只作为上下文；【用户回复】才是用户刚发的话。'
-              '引用原文缺失时，不要猜测用户引用了哪条。\n\n'
+              '引用原文缺失时，不要猜测用户引用了哪条。'
+              '聊天记录中的「收到照片」只是标记，不能查看之前的图片。\n\n'
               + voice + books['before'] + '\n\n【角色设定】\n' + persona + '\n\n【用户资料】\n' + config.get('user_persona', '') +
               '\n\n【用户提供的既有记忆】\n' + config.get('memory', '') + books['middle'])
     now = time.time()
@@ -1249,11 +1389,21 @@ def complete(config, history, text, transport=None):
             if bounds else message
             for message, bounds in zip(history, timeline, strict=True)
         ]
+    if photos := config.get('photos'):
+        prompt += ('\n\n【照片】只能描述本轮实际附带的图片。聊天记录里只有「收到照片」标记的旧照片，'
+                   '以及本轮没有加载的照片，都无法看到。')
+        if config.get('missing_photos'):
+            prompt += '\n本轮有部分照片没有加载。回答时说明这一点。'
+        text = [{'type': 'text', 'text': text}, *photos]
     messages = [{'role': 'system', 'content': prompt}] + history + [{'role': 'user', 'content': text}]
+    return request_model(config, messages, transport)
+
+
+def request_model(config, messages, transport=None, *, timeout=90):
     result = request_json(model_endpoint(config['base_url']), {
         'model': config['model'], 'messages': messages, 'stream': False,
         'temperature': config['temperature'], 'max_tokens': 1600,
-    }, {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + config['api_key']}, 90, transport)
+    }, {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + config['api_key']}, timeout, transport)
     try:
         content = result['choices'][0]['message']['content']
     except (KeyError, IndexError, TypeError):
@@ -1398,6 +1548,8 @@ class Assistant:
     def save_experience(self, payload):
         if any(type(payload.get(key)) is not bool for key in ('shared_history', 'letters_enabled')):
             raise FriendlyError('开关格式不正确。')
+        if 'photo_enabled' in payload and type(payload['photo_enabled']) is not bool:
+            raise FriendlyError('照片识别开关格式不正确。')
         if any(not re.fullmatch(r'(?:[01][0-9]|2[0-3]):[0-5][0-9]', string(payload.get(key), 6))
                for key in ('quiet_start', 'quiet_end')):
             raise FriendlyError('请填写有效的安静时段。')
@@ -1408,7 +1560,8 @@ class Assistant:
             auth = self.auth('telegram')
             if payload['letters_enabled'] and (not auth.get('owner') or not self.channel_connected('telegram', auth)):
                 raise FriendlyError('请先绑定你的 Telegram 私聊，再开启主动来信。')
-            options = {key: payload[key] for key in DEFAULT_EXPERIENCE}
+            options = {key: payload[key] for key in DEFAULT_EXPERIENCE if key != 'photo_enabled'}
+            options['photo_enabled'] = payload.get('photo_enabled', self.store.experience()['photo_enabled'])
             if options['letters_enabled']:
                 options['letter_scope'] = list(self.scope(auth))
             self.store.set('experience', options)
@@ -1587,6 +1740,44 @@ class Assistant:
         else:
             self.store.mark_submitted(job, 0, True, result)
 
+    def reply_to_turn(self, config, auth, channel, job):
+        config['worldbook_entries'] = self.store.worldbook()
+        config['channel'] = channel
+        other = self.auth('telegram' if channel == 'weixin' else 'weixin')
+        other_scope = self.scope(other) if other.get('owner') else None
+        config['shared_history'] = self.store.experience()['shared_history']
+        timeline = []
+        history = self.store.history(job['bot'], job['peer'], config['history_turns'],
+                                     job['created'], other_scope if config['shared_history'] else None,
+                                     timeline=timeline)
+        config['history_timing'] = timeline
+        config['current_timing'] = job['message_range']
+        config['recalled_memories'] = self.store.recall_memories(job['bot'], job['peer'], job['text'], other_scope)
+        typing = self.typing_during(auth) if channel == 'telegram' else contextlib.nullcontext()
+        with typing:
+            return self.model_call(config, history, job['text'])
+
+    def reply_with_photos(self, config, auth, channel, job, refs):
+        if not self.store.experience()['photo_enabled']:
+            return '收到照片啦，配置页里的照片识别目前是关闭的。'
+        download = self.telegram_client(auth).download_photo if channel == 'telegram' else weixin_photo_bytes
+        images, failures = [], []
+        for ref in refs[:MAX_PHOTOS]:
+            try:
+                images.append(photo_content(download(ref)))
+            except FriendlyError as error:
+                failures.append(str(error))
+        if not images:
+            return '收到照片啦，但我没能打开。' + failures[0]
+        if not self.store.experience()['photo_enabled']:
+            return '收到照片啦，配置页里的照片识别目前是关闭的。'
+        config['photos'] = images
+        config['missing_photos'] = len(images) < len(refs)
+        try:
+            return self.reply_to_turn(config, auth, channel, job)
+        except FriendlyError:
+            return '收到照片啦，但这次模型没能读图。请检查所选模型和接口是否都支持图片输入，再发一次。'
+
     def process_one(self, channel='weixin'):
         config, auth = self.store.config(), self.auth(channel)
         if (not self.enabled(channel, auth, config) or not self.ready(config) or
@@ -1599,31 +1790,20 @@ class Assistant:
             return False
         if job['state'] == 'pending':
             try:
+                photos = job.get('photos', [])
                 voice_only = ' 【用户回复】' + json.dumps(VOICE_UNTRANSCRIBED, ensure_ascii=False)
-                if channel == 'weixin' and all(line == VOICE_UNTRANSCRIBED or
+                if photos:
+                    reply = self.reply_with_photos(config, auth, channel, job, photos)
+                elif channel == 'weixin' and all(line == VOICE_UNTRANSCRIBED or
                        (line.startswith('【微信引用】') and line.endswith(voice_only))
                        for line in job['text'].split('\n')):
                     reply = '收到语音啦，这边没有收到转写文字。'
                 else:
-                    config['worldbook_entries'] = self.store.worldbook()
-                    config['channel'] = channel
-                    other = self.auth('telegram' if channel == 'weixin' else 'weixin')
-                    other_scope = self.scope(other) if other.get('owner') else None
-                    config['shared_history'] = self.store.experience()['shared_history']
-                    timeline = []
-                    history = self.store.history(job['bot'], job['peer'], config['history_turns'],
-                                                 job['created'], other_scope if config['shared_history'] else None,
-                                                 timeline=timeline)
-                    config['history_timing'] = timeline
-                    config['current_timing'] = job['message_range']
-                    config['recalled_memories'] = self.store.recall_memories(
-                        job['bot'], job['peer'], job['text'], other_scope)
-                    typing = self.typing_during(auth) if channel == 'telegram' else contextlib.nullcontext()
-                    with typing:
-                        reply = self.model_call(config, history, job['text'])
+                    reply = self.reply_to_turn(config, auth, channel, job)
                 chunks = split_reply(reply)
                 self.store.update_job(job['id'], state='ready', reply=reply,
-                                      chunks=json.dumps(chunks, ensure_ascii=False), attempts=0)
+                                      chunks=json.dumps(chunks, ensure_ascii=False), attempts=0,
+                                      forget_images=bool(photos))
                 job.update(state='ready', reply=reply, chunks=json.dumps(chunks), sent=0)
             except Exception as error:
                 attempts = job['attempts'] + 1
@@ -1927,6 +2107,12 @@ class WebHandler(BaseHTTPRequestHandler):
                 self.respond(200, {'ok': True})
             elif route == 'config' and post:
                 self.save_config(payload)
+            elif route == 'model/probe' and post:
+                config = self.app.store.config()
+                if not all(config[key] for key in ('base_url', 'api_key', 'model')):
+                    raise FriendlyError('请先填写并保存 Base URL、API Key 和模型名称。')
+                request_model(config, [{'role': 'user', 'content': '请只回复 OK。'}], timeout=30)
+                self.respond(200, {'ok': True})
             elif route == 'worldbook' and not post:
                 self.respond(200, {'entries': self.app.store.worldbook()})
             elif route == 'worldbook' and post:
@@ -2034,7 +2220,8 @@ class WebHandler(BaseHTTPRequestHandler):
                 jobs = self.app.store.rows("SELECT id FROM inbox WHERE id=? AND bot=? AND peer=? AND is_letter=0 AND state IN ('uncertain','failed_model','failed_send')", (payload.get('id'), auth.get('bot_id'), auth.get('owner')))
                 if not jobs:
                     raise FriendlyError('这条消息当前不能跳过。')
-                self.app.store.update_job(jobs[0]['id'], state='skipped', error='用户已跳过，继续处理后续消息。')
+                self.app.store.update_job(jobs[0]['id'], state='skipped', error='用户已跳过，继续处理后续消息。',
+                                          forget_images=True)
                 self.respond(200, {'ok': True})
             elif route == 'export' and not post:
                 auth = self.app.auth()

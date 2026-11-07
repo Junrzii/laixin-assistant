@@ -29,10 +29,10 @@ for file in "${runtime_files[@]}"; do
   fi
 done
 if [[ $already_current == yes ]]; then
-  echo '来信助手 v0.2.2 已安装。'
+  echo '来信助手 v0.2.3已安装。'
   exit 0
 fi
-if ! grep -Eq "^VERSION = '(0\.1\.[0123456789]|0\.2\.[012])'$" "$installed_file"; then
+if ! grep -Eq "^VERSION = '(0\.1\.[0123456789]|0\.2\.[0123])'$" "$installed_file"; then
   echo '当前版本不在支持的升级范围内。请核对已安装版本。'
   exit 1
 fi
@@ -120,7 +120,9 @@ page="$(curl -fsS --max-time 5 http://127.0.0.1:8097/wx-assistant/)"
 [[ $page == *'id="wb-panel"'* && $page == *'id="memory-list"'* &&
    $page == *'id="tg-pages-fields"'* && $page == *'id="message-channel"'* &&
    $page == *'id="worldbook-file-note"'* && $page == *'id="experience-form"'* &&
-   $page == *'rel="manifest"'* && $page == *'id="chat-time-note"'* ]]
+   $page == *'rel="manifest"'* && $page == *'id="chat-time-note"'* &&
+   $page == *'id="setup-card"'* && $page == *'id="model-test"'* &&
+   $page == *'id="photo-enabled"'* ]]
 curl -fsS --max-time 5 http://127.0.0.1:8097/wx-assistant/manifest.webmanifest >/dev/null
 deploy_pending=no
-echo '来信助手 v0.2.2 已运行。时间感知已启用。'
+echo '来信助手 v0.2.3已运行。'
