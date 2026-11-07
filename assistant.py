@@ -493,22 +493,6 @@ def weixin_message_id(value):
     return ''
 
 
-def png_card(raw):
-    pos = 8
-    while pos + 12 <= len(raw):
-        length = struct.unpack('!I', raw[pos:pos + 4])[0]
-        kind = raw[pos + 4:pos + 8]
-        data = raw[pos + 8:pos + 8 + length]
-        if len(data) != length:
-            break
-        if kind == b'tEXt' and b'\x00' in data:
-            key, payload = data.split(b'\x00', 1)
-            if key in (b'chara', b'ccv3'):
-                return json.loads(base64.b64decode(payload, validate=True))
-        pos += length + 12
-    raise FriendlyError('PNG 中没有找到角色卡信息。请改用角色 JSON 或直接粘贴人设。')
-
-
 def worldbook_entry(data, category='', imported=False):
     if not isinstance(data, dict):
         raise FriendlyError('世界书条目格式不正确。')
@@ -641,81 +625,6 @@ def worldbook_blocks(entries, config, text):
         blocks[entry['position']].append(content)
     return {key: '\n\n【世界书 · ' + label + '】\n' + '\n\n'.join(blocks[key]) if blocks[key] else ''
             for key, label in zip(WORLDBOOK_POSITIONS, ('前', '中', '后'))}
-
-
-def import_profiles(raw, filename):
-    """Extract only allowlisted role fields. Never retain API/Weixin keys or full backups."""
-    if len(raw) > 8 * 1024 * 1024:
-        raise FriendlyError('角色文件请控制在 8MB 内；完整聊天备份请先导出单个角色。')
-    if filename.lower().endswith('.txt'):
-        return [dict(name=Path(filename).stem[:100], persona=raw.decode('utf-8-sig'),
-                     user_persona='', memory='')]
-    if raw.startswith(b'\x89PNG\r\n\x1a\n'):
-        data = png_card(raw)
-    else:
-        data = json.loads(raw.decode('utf-8-sig'))
-    root = data
-    for _ in range(4):
-        if isinstance(root, dict) and isinstance(root.get('data'), dict):
-            root = root['data']
-        elif isinstance(root, dict) and isinstance(root.get('character'), dict):
-            root = root['character']
-        elif isinstance(root, dict) and isinstance(root.get('profile'), dict):
-            root = root['profile']
-        else:
-            break
-    if not isinstance(root, dict):
-        raise FriendlyError('这不是支持的角色 JSON。')
-    chars = root.get('characters', [root])
-    if not isinstance(chars, list):
-        raise FriendlyError('角色列表格式不正确。')
-    result = []
-    for character in chars[:50]:
-        if not isinstance(character, dict):
-            continue
-        c = character.get('data') if isinstance(character.get('data'), dict) else character
-        name = string(c.get('realName') or c.get('name') or c.get('remarkName'), 100)
-        persona = '\n\n'.join(filter(None, [string(c.get('persona') or c.get('description')),
-            string(c.get('personality')), string(c.get('scenario')),
-            string(c.get('system_prompt')), string(c.get('mes_example')),
-            string(c.get('post_history_instructions'))]))
-        memory = [string(c.get('memory'))]
-        worldbook = [string(c.get('worldbook')), string(c.get('world_info'))]
-        entries = [worldbook_entry({'name': '原世界书', 'content': content, 'position': 'after',
-                                    'category': name or '角色世界书'}) for content in worldbook if content.strip()]
-        if isinstance(data, dict) and isinstance(data.get('profile'), dict) and 'worldbook_entries' in data:
-            entries = import_worldbooks(data['worldbook_entries'])
-        for journal in c.get('memoryJournals', []) if isinstance(c.get('memoryJournals'), list) else []:
-            if isinstance(journal, dict) and journal.get('isFavorited'):
-                memory.append(string(journal.get('content') or journal.get('summary')))
-        book = c.get('character_book', {})
-        for entry in book.get('entries', []) if isinstance(book, dict) else []:
-            if isinstance(entry, dict) and string(entry.get('content')).strip():
-                entries.append(worldbook_entry(entry, name or '角色世界书', imported=True))
-                if entry.get('enabled', True):
-                    worldbook.append(string(entry.get('content')))
-        # OVO bound worldbooks only; unrelated characters' worldbooks stay out.
-        ids = c.get('worldBookIds', [])
-        if isinstance(ids, list):
-            for entry in root.get('worldBooks', []) if isinstance(root.get('worldBooks'), list) else []:
-                if (isinstance(entry, dict) and (entry.get('id') in ids or entry.get('isGlobal') is True)
-                        and string(entry.get('content')).strip()):
-                    entries.append(worldbook_entry(entry, name or '角色世界书', imported=True))
-                    if not entry.get('disabled'):
-                        worldbook.append(string(entry.get('content')))
-        if persona:
-            profile = dict(name=name or '角色', persona=persona[:60000],
-                user_persona=string(c.get('myPersona') or c.get('user_persona'), 10000),
-                memory='\n\n'.join(filter(None, memory))[:60000])
-            book_text = '\n\n'.join(filter(None, worldbook))[:60000]
-            if book_text or isinstance(c.get('worldbook'), str):
-                profile['worldbook'] = book_text
-            if entries:
-                profile['worldbook_entries'] = entries
-            result.append(profile)
-    if not result:
-        raise FriendlyError('未找到人设正文；可以在配置页直接粘贴 OVO 人设与记忆。')
-    return result
 
 
 def memory_terms(text):
@@ -2070,7 +1979,7 @@ class Assistant:
                              'pair_url': self.pair_url(telegram), 'runtime': dict(self.telegram_runtime),
                              'jobs': self.store.turn_rows(*telegram_scope, limit=25),
                              'saved_memories': self.store.memories(*telegram_scope)},
-                'notice': '微信和 OVO 各自保存后续对话；这里只导入人设与既有记忆。'}
+                'notice': '微信与 Telegram 的聊天记录分开保存。'}
 
 
 def hash_password(password, salt):
@@ -2272,15 +2181,6 @@ class WebHandler(BaseHTTPRequestHandler):
                     raise FriendlyError('请选择修改或删除记忆。')
                 self.app.store.change_memory(auth['bot_id'], auth['owner'], memory_id, text)
                 self.respond(200, {'ok': True})
-            elif route == 'import' and post:
-                try:
-                    raw = base64.b64decode(payload.get('file', ''), validate=True)
-                    profiles = import_profiles(raw, string(payload.get('filename'), 200))
-                except FriendlyError:
-                    raise
-                except Exception:
-                    raise FriendlyError('无法读取这个角色文件，请使用 JSON、PNG 角色卡或 UTF-8 TXT。') from None
-                self.respond(200, {'profiles': profiles})
             elif route == 'qr' and post:
                 self.app.begin_login()
                 self.respond(200, {'ok': True})

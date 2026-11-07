@@ -4,14 +4,14 @@
 
 ## 从这里开始
 
-- [19 页宝宝教程（PDF）](./laixin-guide.pdf)　Windows 从第 2 页开始，Mac / Linux 从第 3 页开始，云服务器从第 4 页开始。
+- [19 页宝宝教程（PDF）](./laixin-guide.pdf)　Windows 从第 2 页开始，Mac / Linux 从第 3 页开始，云服务器从第 4 页开始。教程以 v0.2.3 为例，后续版本请在「角色与记忆」直接填写或粘贴人设。
 - [下载最新版安装包](https://github.com/Junrzii/laixin-assistant/releases/latest)　展开 **Assets**，选择 `laixin-assistant-vX.Y.Z.zip`。
 - 刚开始用？打开配置页，跟着「收第一封来信」走。保存模型配置后可以先点「测试模型」。
 - 已经在用来信？教程第 16 页有升级步骤，第 17 页有常见问题。
 
 ## 可以做什么
 
-- 导入角色卡或填写人设，配置自己的 OpenAI 兼容模型接口。
+- 填写或粘贴角色人设与已有记忆，配置自己的 OpenAI 兼容模型接口。
 - 在微信和 Telegram 私聊收发消息，可选择跨平台续聊和共享长期记忆。
 - 在 Telegram 开启主动来信，设置每天上限和安静时段。
 - 默认启用北京时间感知，模型会参考发消息的时间和对话间隔。

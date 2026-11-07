@@ -7,7 +7,7 @@
 <link rel="apple-touch-icon" sizes="180x180" href="./icon-180.png">
 <link rel="icon" type="image/png" href="./icon-192.png">
 <link rel="manifest" href="./manifest.webmanifest">
-<link rel="stylesheet" href="./style.css?v=0.2.4"><script src="./app.js?v=0.2.4" defer></script>
+<link rel="stylesheet" href="./style.css?v=0.2.4-1"><script src="./app.js?v=0.2.4-1" defer></script>
 </head>
 <body><main>
 <header class="app-header"><img class="app-mark" src="./icon-180.png" alt="" width="52" height="52"><div><span class="eyebrow">PRIVATE COMPANION</span><h1>来信</h1><p>把你喜欢的角色，带进日常聊天。</p></div></header>
@@ -24,9 +24,9 @@
   </ol>
 </section>
 <section class="card status-card"><div><span class="eyebrow">微信连接</span><h2 id="connection">尚未连接微信</h2><p id="runtime" class="muted">先保存角色，再扫码。</p></div><span id="status-dot" class="dot"></span><p id="runtime-error" class="error full"></p><button id="enabled" class="full" type="button">开启自动回复</button></section>
-<section class="card"><div class="section-heading"><h2 id="role-settings" tabindex="-1">01 / 角色与记忆</h2><label class="file-label">导入文件<input id="role-file" type="file" accept=".json,.png,.txt" hidden></label></div><p class="muted">支持角色 JSON、PNG 角色卡和人设 TXT。也可以直接粘贴 OVO 的人设与记忆。</p><div id="import-preview" hidden><label>选择要导入的角色<select id="profile-picker"></select></label><p id="import-summary" class="muted"></p><button type="button" id="apply-import" class="secondary">填入下方，检查后保存</button></div><form id="config-form">
+<section class="card"><div class="section-heading"><h2 id="role-settings" tabindex="-1">01 / 角色与记忆</h2></div><p class="muted">可以直接填写或粘贴角色人设与已有记忆。</p><form id="config-form">
 <label>角色名字<input id="name" maxlength="100" placeholder="输入你想使用的角色名字" autocomplete="off"></label>
-<label>角色人设<textarea id="persona" rows="7" maxlength="60000" placeholder="写下角色的性格、背景和说话方式，或导入角色卡…" required></textarea></label>
+<label>角色人设<textarea id="persona" rows="7" maxlength="60000" placeholder="写下或粘贴角色的性格、背景和说话方式" required></textarea></label>
 <label>你的资料 <span class="optional">选填</span><textarea id="user_persona" rows="3" maxlength="10000" placeholder="填写希望角色知道的称呼或偏好…"></textarea></label>
 <label>既有记忆 <span class="optional">选填</span><textarea id="memory" rows="5" maxlength="60000" placeholder="复制需要带过来的记忆摘要…"></textarea></label>
 <div class="wb-link"><div><strong>世界书</strong><span>按分类管理，支持批量导入</span></div><button id="wb-open" class="secondary" type="button">打开世界书 <span aria-hidden="true">›</span></button></div>
@@ -101,7 +101,7 @@
 <p id="letters-status" class="muted" aria-live="polite"></p>
 </section>
 <section class="card"><div class="section-heading"><h2>最近来信</h2><button id="refresh" type="button" class="text-button">刷新</button></div><label>聊天平台<select id="message-channel"><option value="weixin">微信</option><option value="telegram">Telegram</option></select></label><p class="muted" id="delivery-note">提交状态只表示微信接口处理了请求。实际送达以微信聊天窗口为准。</p><p class="muted" id="quote-note">新收到的微信引用会和回复一起显示。微信没有提供原文时会注明。</p><div id="messages"><p class="muted">还没有微信消息。</p></div></section>
-<footer><p>微信与 Telegram 的聊天记录分开保存。这里不会自动回写 OVO。</p><div><a href="./api/export" download>导出人设、记忆、世界书与对话</a><button id="logout" type="button" class="text-button">退出配置页</button></div></footer>
+<footer><p>微信与 Telegram 的聊天记录分开保存。</p><div><a href="./api/export" download>导出人设、记忆、世界书与对话</a><button id="logout" type="button" class="text-button">退出配置页</button></div></footer>
 </div>
 <section id="wb-panel" class="wb-panel" hidden>
   <header class="wb-header">
@@ -133,14 +133,14 @@
       <label><input type="radio" name="wb-position" value="middle">中</label>
       <label><input type="radio" name="wb-position" value="after">后</label>
     </fieldset>
-    <label class="wb-switch"><span>全局世界书 <small>保留 OVO 标记，当前只有一个角色</small></span><input id="wb-global" type="checkbox" role="switch"></label>
+    <label class="wb-switch"><span>全局世界书 <small>保留文件中的全局标记，当前只有一个角色</small></span><input id="wb-global" type="checkbox" role="switch"></label>
     <label class="wb-switch"><span>常驻 <small>开启后，每次回复都读取这条</small></span><input id="wb-always" type="checkbox" role="switch" checked></label>
     <label id="wb-keywords-label" hidden>触发词<input id="wb-keywords" maxlength="1000" placeholder="用逗号分隔，例如：律所，开庭" autocomplete="off"><span class="hint">微信本轮消息里出现任一触发词时读取。</span></label>
     <label class="wb-switch"><span>启用</span><input id="wb-enabled" type="checkbox" role="switch" checked></label>
     <button type="submit">保存条目</button>
   </form>
   <form id="wb-import-form" class="wb-editor" hidden>
-    <p class="muted" id="worldbook-file-note">在 OVO 点「分类导出数据」，只勾选「世界书」，然后选导出的 .ee 文件。也可以一次选多份 Word（.docx）、JSON 或 TXT。每份 Word 文档按文件名导入为一条。</p>
+    <p class="muted" id="worldbook-file-note">如果来源支持分类导出，请只选择「世界书」，再上传导出的 .ee 文件。也可以一次选多份 Word（.docx）、JSON 或 TXT。每份 Word 文档按文件名导入为一条。</p>
     <label>选择文件<input id="wb-files" type="file" accept=".ee,.json,.txt,.gz,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple required></label>
     <label class="wb-switch"><span>保留文件里的启用状态 <small>默认先停用，导入后再挑要用的条目</small></span><input id="wb-keep-enabled" type="checkbox" role="switch"></label>
     <button type="submit">导入世界书</button>

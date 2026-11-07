@@ -1,12 +1,10 @@
 'use strict';
 const $=id=>document.getElementById(id);
 const base=location.pathname.replace(/\/$/,'');
-let pendingRoleBooks=[];
-let csrf='',state=null,loaded=false,profiles=[],toastTimer,refreshing=false,qrShown=false;
-const profileFields=['name','persona','user_persona','memory'];
-const fields=[...profileFields,'base_url','model','temperature','history_turns'];
+let csrf='',state=null,loaded=false,toastTimer,refreshing=false,qrShown=false;
+const fields=['name','persona','user_persona','memory','base_url','model','temperature','history_turns'];
 function toast(message){$('toast').textContent=message;$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,6500);}
-async function api(path,data){const response=await fetch(base+'/api/'+path,{method:data===undefined?'GET':'POST',credentials:'same-origin',headers:data===undefined?{}:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:data===undefined?undefined:JSON.stringify(data)});const result=await response.json();if(response.status===401){if(wb.view!=='closed')showWorldbook('closed');pendingRoleBooks=[];$('login-panel').hidden=false;$('app').hidden=true;loaded=false;}if(!response.ok)throw Error(result.error||'请求失败，请稍后重试。');return result;}
+async function api(path,data){const response=await fetch(base+'/api/'+path,{method:data===undefined?'GET':'POST',credentials:'same-origin',headers:data===undefined?{}:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:data===undefined?undefined:JSON.stringify(data)});const result=await response.json();if(response.status===401){if(wb.view!=='closed')showWorldbook('closed');$('login-panel').hidden=false;$('app').hidden=true;loaded=false;}if(!response.ok)throw Error(result.error||'请求失败，请稍后重试。');return result;}
 async function action(button,callback){button.disabled=true;try{await callback();}catch(error){toast(error.message);}finally{button.disabled=false;}}
 async function refresh(){if(refreshing)return;refreshing=true;try{state=await api('state');csrf=state.csrf;$('login-panel').hidden=true;$('app').hidden=wb.view!=='closed';const c=state.config;renderSetup(c);if(!loaded){for(const field of fields)$(field).value=c[field]??'';$('tg-mode').value=state.telegram.relay_url?'pages':'standard';$('tg-relay-url').value=state.telegram.relay_url||'';renderTelegramMode();loadExperience(state.experience);loaded=true;}$('api_key').placeholder=c.has_api_key?'已保存，留空保持不变':'填写你的 API Key';$('key-status').textContent=c.has_api_key?'已有 Key，保存后不会回显。':'尚未保存 API Key';$('connection').textContent=c.enabled?'微信助手运行中':state.connected?'微信已连接，回复已暂停':'尚未连接微信';$('status-dot').classList.toggle('online',c.enabled&&state.connected);$('runtime').textContent=c.enabled?state.runtime.poll:'先保存配置并扫码，然后开启自动回复。';$('runtime-error').textContent=c.enabled?state.runtime.error:'';$('enabled').textContent=c.enabled?'暂停自动回复':'开启自动回复';$('new-qr').disabled=!!state.login.running;const statuses={idle:'',starting:'正在获取二维码…',wait:'等待微信扫码与确认',scaned:'已扫码，请在微信确认',confirmed:'微信连接成功，可以开启自动回复。',expired:'二维码已过期，请重新获取。',need_verifycode:'请填写微信显示的验证码。',verify_code_blocked:'验证码尝试过多，请重新扫码。',scaned_but_redirect:'微信正在继续验证…',binded_redirect:'这个 Bot 已绑定其他实例，请在微信检查连接。',error:state.login.error||'连接失败，请重新尝试。'};$('qr-status').textContent=statuses[state.login.status]??state.login.status;$('verify-area').hidden=state.login.status!=='need_verifycode';$('qr-area').hidden=!state.login.has_qr;if(state.login.has_qr&&!qrShown){$('qr-image').src=base+'/api/qr.png?t='+Date.now();qrShown=true;}if(!state.login.has_qr)qrShown=false;$('owner-area').hidden=!state.connected||state.owner_bound;renderOwners(state.pending_owners);renderTelegram(state.telegram);renderExperience(state.experience,state.telegram);renderMemories(state.saved_memories,state.telegram.saved_memories);renderMessages();}catch(error){if($('login-panel').hidden)toast(error.message);}finally{refreshing=false;}}
 function renderSetup(config){
@@ -292,7 +290,7 @@ function renderMessages(){
 }
 $('message-channel').addEventListener('change',renderMessages);
 $('login-form').addEventListener('submit',event=>{event.preventDefault();action(event.submitter,async()=>{await api('login',{password:$('password').value});$('password').value='';loaded=false;await refresh();});});
-$('config-form').addEventListener('submit',event=>{event.preventDefault();const data={};for(const field of fields)data[field]=['temperature','history_turns'].includes(field)?Number($(field).value):$(field).value;data.api_key=$('api_key').value;if(pendingRoleBooks.length)data.worldbook_entries=pendingRoleBooks;action(event.submitter,async()=>{await api('config',data);pendingRoleBooks=[];$('api_key').value='';toast('角色和模型配置已保存。');await refresh();});});
+$('config-form').addEventListener('submit',event=>{event.preventDefault();const data={};for(const field of fields)data[field]=['temperature','history_turns'].includes(field)?Number($(field).value):$(field).value;data.api_key=$('api_key').value;action(event.submitter,async()=>{await api('config',data);$('api_key').value='';toast('角色和模型配置已保存。');await refresh();});});
 const modelProbeFields=['base_url','model','temperature','api_key'];
 const modelTestStatus=$('model-test-status');
 let modelProbeRevision=0;
@@ -335,23 +333,6 @@ $('new-qr').addEventListener('click',event=>action(event.currentTarget,async()=>
 $('send-verify').addEventListener('click',event=>action(event.currentTarget,async()=>{await api('verify',{code:$('verify-code').value.trim()});$('verify-code').value='';toast('验证码已提交。');}));
 $('refresh').addEventListener('click',()=>refresh());
 $('logout').addEventListener('click',event=>action(event.currentTarget,async()=>{await api('logout',{});location.reload();}));
-$('role-file').addEventListener('change',async event=>{const file=event.target.files[0];if(!file)return;try{if(file.size>8*1024*1024)throw Error('请导出单个角色，文件须小于 8MB。');const result=await api('import',{filename:file.name,file:await encodeFile(file)});profiles=result.profiles;$('profile-picker').replaceChildren();for(let i=0;i<profiles.length;i++){const option=document.createElement('option');option.value=i;option.textContent=profiles[i].name;$('profile-picker').append(option);}$('import-preview').hidden=false;importSummary();toast('已读取，检查角色后再填入。');}catch(error){toast(error.message);}finally{event.target.value='';}});
-function importSummary(){
-  const profile=profiles[Number($('profile-picker').value)];
-  const book=profile?.worldbook_entries?.length?` · 世界书 ${profile.worldbook_entries.length} 条`:'';
-  $('import-summary').textContent=profile?`人设 ${profile.persona.length} 字 · 既有记忆 ${profile.memory.length} 字${book}。填写后仍需点击保存。`:'';
-}
-$('profile-picker').addEventListener('change',importSummary);
-$('apply-import').addEventListener('click',()=>{
-  const profile=profiles[Number($('profile-picker').value)];
-  if(!profile)return;
-  if(($('persona').value||$('memory').value)&&!confirm('用选中的角色替换下方人设和既有记忆？'))return;
-  for(const field of profileFields)$(field).value=profile[field]||'';
-  pendingRoleBooks=profile.worldbook_entries||[];
-  $('import-preview').hidden=true;
-  profiles=[];
-  toast('已填入。检查内容后点击“保存角色与模型”。');
-});
 const wb={view:'closed',category:null,entries:[],editing:null,dirty:false,scroll:0};
 const wbIcons={
   back:'<path d="m15 5-7 7 7 7"/>',
@@ -578,7 +559,7 @@ async function readWorldbookFile(file){
     bytes+=value.byteLength;
     if(bytes>64*1024*1024){
       await reader.cancel();
-      throw Error('解压后超过 64 MB。请在 OVO 分类导出时只选「世界书」。');
+      throw Error('解压后超过 64 MB。请只导出世界书，或分批导入。');
     }
     raw+=decoder.decode(value,{stream:true});
   }
