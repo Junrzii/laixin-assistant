@@ -85,6 +85,7 @@ $('tg-enabled').addEventListener('click',event=>action(event.currentTarget,async
 }));
 
 function loadExperience(options){
+  $('auto-memory').checked=options.auto_memory;
   $('photo-enabled').checked=options.photo_enabled;
   $('shared-history').checked=options.shared_history;
   $('letters-enabled').checked=options.letters_enabled;
@@ -104,6 +105,7 @@ $('experience-form').addEventListener('submit',event=>{
   action(event.submitter,async()=>{
     await api('experience',{
       shared_history:$('shared-history').checked,
+      auto_memory:$('auto-memory').checked,
       photo_enabled:$('photo-enabled').checked,
       letters_enabled:$('letters-enabled').checked,
       quiet_start:$('letters-quiet-start').value,
@@ -123,6 +125,7 @@ function closeMemoryEditor(){
 }
 
 function renderMemories(weixin,telegram){
+  renderAutoMemoryStatus();
   const memories=[
     ...weixin.map(memory=>({...memory,channel:'weixin'})),
     ...telegram.map(memory=>({...memory,channel:'telegram'})),
@@ -145,7 +148,7 @@ function renderMemories(weixin,telegram){
     entry.className='message';
     const source=document.createElement('div');
     source.className='meta';
-    source.textContent=memory.channel==='telegram'?'Telegram':'微信';
+    source.textContent=`${memory.channel==='telegram'?'Telegram':'微信'} · ${memory.source==='auto'?'自动记忆':'手动记忆'} · ${memoryDate(memory.created)}`;
     const content=document.createElement('p');
     content.textContent=memory.text;
     const actions=document.createElement('div');
@@ -177,6 +180,27 @@ function renderMemories(weixin,telegram){
   }
 }
 
+function memoryDate(seconds){
+  return new Date(seconds*1000).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false});
+}
+
+function renderAutoMemoryStatus(){
+  const enabled=state.experience.auto_memory;
+  $('auto-memory-state').textContent=enabled?'自动记忆已开启 · 最近处理结果':'自动记忆已关闭，可继续手动保存';
+  for(const [channel,name,bound] of [['weixin','微信',state.owner_bound],['telegram','Telegram',state.telegram.bound]]){
+    const line=$('auto-memory-'+channel);
+    const event=state.memory_status?.[channel];
+    line.hidden=!enabled;
+    if(!enabled)continue;
+    if(!bound){line.textContent=`${name} · 等待绑定私聊`;continue;}
+    if(!event){line.textContent=`${name} · 等待新消息回复后筛选`;continue;}
+    const labels={saved:`新增 ${event.saved} 条长期记忆`,duplicate:'已有相同的记忆',full:'已到自动记忆保存上限',
+      skipped:'本轮没有可筛选的纯文字',no_match:'模型没有选出长期信息',error:'筛选失败，可能是模型超时或返回格式不兼容'};
+    line.textContent=`${name} · ${labels[event.status]||'状态未知'} · ${memoryDate(event.at)}`;
+  }
+}
+
+$('memory-refresh').addEventListener('click',event=>action(event.currentTarget,refresh));
 $('memory-cancel').addEventListener('click',closeMemoryEditor);
 memoryForm.addEventListener('submit',event=>{
   event.preventDefault();
@@ -654,3 +678,4 @@ $('wb-export').addEventListener('click',()=>{
 
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});
 refresh();setInterval(()=>{if(!document.hidden&&loaded)refresh();},2500);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&loaded)refresh();});

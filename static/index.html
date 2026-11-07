@@ -7,7 +7,7 @@
 <link rel="apple-touch-icon" sizes="180x180" href="./icon-180.png">
 <link rel="icon" type="image/png" href="./icon-192.png">
 <link rel="manifest" href="./manifest.webmanifest">
-<link rel="stylesheet" href="./style.css?v=0.2.3"><script src="./app.js?v=0.2.3" defer></script>
+<link rel="stylesheet" href="./style.css?v=0.2.4"><script src="./app.js?v=0.2.4" defer></script>
 </head>
 <body><main>
 <header class="app-header"><img class="app-mark" src="./icon-180.png" alt="" width="52" height="52"><div><span class="eyebrow">PRIVATE COMPANION</span><h1>来信</h1><p>把你喜欢的角色，带进日常聊天。</p></div></header>
@@ -69,8 +69,11 @@
 </div>
 <div class="actions"><button id="tg-renew" class="secondary" type="button" hidden>重新生成绑定链接</button><button id="tg-enabled" type="button" hidden>开启 Telegram 自动回复</button></div>
 </section>
-<section class="card"><h2>05 / 共享长期记忆</h2>
-<p class="muted">在微信或 Telegram 单独发「记住：你想保存的内容」，就会保存到这里。两边聊到相关话题时都可以参考。</p>
+<section class="card"><div class="section-heading"><h2>05 / 共享长期记忆</h2><button id="memory-refresh" type="button" class="secondary">刷新记忆</button></div>
+<p class="muted">在微信或 Telegram 单独发「记住：你想保存的内容」，就会保存到这里。长期记忆保存在服务器，重启后仍可用。两边聊到相关话题时都可以参考。</p>
+<div class="note"><strong id="auto-memory-state">正在读取自动记忆状态…</strong>
+<p id="auto-memory-weixin" hidden></p><p id="auto-memory-telegram" hidden></p>
+<a href="#auto-memory">前往自动记忆设置</a></div>
 <form id="memory-edit-form" hidden>
 <label>修改记忆<textarea id="memory-text" rows="3" maxlength="500" required></textarea></label>
 <button type="submit">保存修改</button><button id="memory-cancel" type="button" class="text-button">取消</button>
@@ -79,6 +82,8 @@
 <section class="card"><h2>06 / 聊天体验</h2>
 <p class="muted" id="chat-time-note">时间感知已启用。助手按北京时间参考消息时间与对话间隔。</p>
 <form id="experience-form">
+<label class="experience-toggle"><input id="auto-memory" type="checkbox"><span>从新私聊自动记住长期信息</span></label>
+<p class="muted">默认关闭。开启后，部分纯文字回复送出后，来信会用当前聊天模型再筛一次用户原话，可能产生额外的模型用量。筛出的内容会标为「自动记忆」，可在上方修改或删除。</p>
 <label class="experience-toggle"><input id="photo-enabled" type="checkbox"><span>让角色识别私聊照片</span></label>
 <p class="muted">需要支持图片输入的模型。开启后，照片会交给已配置的模型服务，来信只在本轮处理照片，历史记录保留文字标记。Telegram Pages 中转请先升级到 v4，微信加密照片需要安装包内说明所列的解密依赖。</p>
 <label class="experience-toggle"><input id="shared-history" type="checkbox"><span>微信和 Telegram 接着聊</span></label>

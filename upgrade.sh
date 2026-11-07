@@ -29,11 +29,16 @@ for file in "${runtime_files[@]}"; do
   fi
 done
 if [[ $already_current == yes ]]; then
-  echo '来信助手 v0.2.3已安装。'
+  echo '来信助手 v0.2.4 已安装。'
   exit 0
 fi
-if ! grep -Eq "^VERSION = '(0\.1\.[0123456789]|0\.2\.[0123])'$" "$installed_file"; then
+if ! grep -Eq "^VERSION = '(0\.1\.[0123456789]|0\.2\.[01234])'$" "$installed_file"; then
   echo '当前版本不在支持的升级范围内。请核对已安装版本。'
+  exit 1
+fi
+
+if grep -q '^    def transcribe_turn(' "$installed_file"; then
+  echo '检测到 Telegram 语音预览版。请用包含语音的「平台感知预览包」更新，以保留语音转写。'
   exit 1
 fi
 
@@ -122,7 +127,7 @@ page="$(curl -fsS --max-time 5 http://127.0.0.1:8097/wx-assistant/)"
    $page == *'id="worldbook-file-note"'* && $page == *'id="experience-form"'* &&
    $page == *'rel="manifest"'* && $page == *'id="chat-time-note"'* &&
    $page == *'id="setup-card"'* && $page == *'id="model-test"'* &&
-   $page == *'id="photo-enabled"'* ]]
+   $page == *'id="photo-enabled"'* && $page == *'id="auto-memory-state"'* ]]
 curl -fsS --max-time 5 http://127.0.0.1:8097/wx-assistant/manifest.webmanifest >/dev/null
 deploy_pending=no
-echo '来信助手 v0.2.3已运行。'
+echo '来信助手 v0.2.4 已运行。'
